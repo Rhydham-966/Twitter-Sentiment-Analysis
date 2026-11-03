@@ -1,5 +1,7 @@
 import streamlit as st
 import pandas as pd
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from sentiment_utils import (
     predict_from_texts,
@@ -9,288 +11,251 @@ from sentiment_utils import (
     explain_text,
 )
 
-st.set_page_config(page_title="Twitter Sentiment Analyzer", page_icon="🕊️", layout="wide")
-
-st.markdown(
-    """
-    <style>
-    .main {
-        background: radial-gradient(circle at top left, #1f2933 0, #020617 45%, #020617 100%);
-        color: #e5e7eb;
-    }
-    .block-container {
-        padding-top: 2rem;
-        padding-bottom: 2rem;
-        max-width: 1200px;
-    }
-    .big-title {
-        font-size: 2.8rem;
-        font-weight: 800;
-        letter-spacing: 0.04em;
-    }
-    .accent {
-        color: #22c55e;
-    }
-    .subtitle {
-        font-size: 0.95rem;
-        color: #9ca3af;
-        margin-top: 0.4rem;
-    }
-    .pill {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.4rem;
-        padding: 0.25rem 0.75rem;
-        border-radius: 999px;
-        background: rgba(15,23,42,0.85);
-        border: 1px solid rgba(55,65,81,0.9);
-        font-size: 0.8rem;
-        color: #e5e7eb;
-    }
-    .card {
-        background: rgba(15,23,42,0.92);
-        border-radius: 1rem;
-        padding: 1.25rem 1.4rem;
-        border: 1px solid rgba(55,65,81,0.9);
-        box-shadow: 0 18px 45px rgba(0,0,0,0.65);
-    }
-    .card-soft {
-        background: rgba(15,23,42,0.88);
-        border-radius: 1rem;
-        padding: 1rem 1.1rem;
-        border: 1px solid rgba(55,65,81,0.7);
-    }
-    .metric-label {
-        font-size: 0.8rem;
-        color: #9ca3af;
-    }
-    .metric-value {
-        font-size: 1.7rem;
-        font-weight: 700;
-    }
-    .metric-pill-pos {
-        color: #bbf7d0;
-        background: rgba(22,163,74,0.2);
-        padding: 0.15rem 0.55rem;
-        border-radius: 999px;
-        font-size: 0.75rem;
-    }
-    .metric-pill-neg {
-        color: #fecaca;
-        background: rgba(220,38,38,0.22);
-        padding: 0.15rem 0.55rem;
-        border-radius: 999px;
-        font-size: 0.75rem;
-    }
-    .section-title {
-        font-size: 1.15rem;
-        font-weight: 700;
-        margin-bottom: 0.4rem;
-    }
-    .token-chip-pos {
-        display: inline-flex;
-        align-items: center;
-        padding: 0.18rem 0.55rem;
-        margin: 0.12rem;
-        border-radius: 999px;
-        background: rgba(22,163,74,0.22);
-        color: #bbf7d0;
-        font-size: 0.75rem;
-    }
-    .token-chip-neg {
-        display: inline-flex;
-        align-items: center;
-        padding: 0.18rem 0.55rem;
-        margin: 0.12rem;
-        border-radius: 999px;
-        background: rgba(220,38,38,0.22);
-        color: #fecaca;
-        font-size: 0.75rem;
-    }
-    .token-score {
-        font-size: 0.7rem;
-        opacity: 0.8;
-        margin-left: 0.25rem;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
+# ─── Page Config ─────────────────────────────────────────────────
+st.set_page_config(
+    page_title="Sentiment Engine",
+    page_icon="⚡",
+    layout="wide",
 )
 
-st.markdown(
-    """
-    <div class="pill">🕊️ NLP • TF-IDF • Logistic Regression • Token-level Explainability</div>
-    <div class="big-title">Twitter Sentiment Analyzer</div>
-    <div class="subtitle">
-        Production-style dashboard to score sentiment, visualize polarity, and highlight the words driving each prediction.
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
+# ─── Minimal CSS — only colors and fonts, no layout hacks ───────
+st.markdown("""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
-tabs = st.tabs(["🎯 Live Text Analyzer", "📊 CSV Report Studio"])
+#MainMenu, footer, header { visibility: hidden; }
 
-with tabs[0]:
-    c1, c2 = st.columns([1.35, 1])
+.stApp {
+    font-family: 'Inter', sans-serif !important;
+}
 
-    with c1:
-        st.markdown('<div class="section-title">Enter or paste text</div>', unsafe_allow_html=True)
-        st.markdown('<div class="card">', unsafe_allow_html=True)
-        user_text = st.text_area(
-            "",
-            height=180,
-            placeholder="Paste a tweet, product review, or any paragraph to analyze its sentiment and see top contributing tokens…",
-        )
-        analyze_btn = st.button("Analyze Sentiment", type="primary", use_container_width=True)
-        st.markdown("</div>", unsafe_allow_html=True)
+/* Clean dark background */
+[data-testid="stAppViewContainer"] {
+    background-color: #0f0f0f !important;
+}
+[data-testid="stSidebar"] {
+    background-color: #161616 !important;
+}
 
-    with c2:
-        st.markdown('<div class="section-title">Insight summary</div>', unsafe_allow_html=True)
-        st.markdown('<div class="card">', unsafe_allow_html=True)
+/* Button styling */
+button[kind="primary"] {
+    background-color: #e5e5e5 !important;
+    color: #0f0f0f !important;
+    font-weight: 700 !important;
+    border-radius: 8px !important;
+    border: none !important;
+}
+button[kind="primary"]:hover {
+    background-color: #ffffff !important;
+}
+</style>
+""", unsafe_allow_html=True)
 
-        if analyze_btn and user_text.strip() != "":
-            label, prob, pos_tokens, neg_tokens = explain_text(user_text)
+# ─── Sidebar ─────────────────────────────────────────────────────
+with st.sidebar:
+    st.markdown("## ⚡ Sentiment Engine")
+    st.caption("1.6M Tweet Pipeline · v2.0")
+    st.divider()
 
-            sentiment_text = "Positive" if label == 1 else "Negative"
-            sentiment_emoji = "😊" if label == 1 else "😡"
-            sentiment_color = "#22c55e" if label == 1 else "#ef4444"
-
-            st.markdown(
-                f"""
-                <div style="font-size:0.9rem;color:#9ca3af;margin-bottom:0.35rem;">Predicted sentiment</div>
-                <div style="font-size:2rem;font-weight:700;color:{sentiment_color};">
-                    {sentiment_text} {sentiment_emoji}
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
-            st.markdown("<br>", unsafe_allow_html=True)
-
-            c_top = st.columns(2)
-            with c_top[0]:
-                st.markdown('<div class="metric-label">Confidence (positive class)</div>', unsafe_allow_html=True)
-                st.markdown(
-                    f'<div class="metric-value">{prob:.2f}</div>',
-                    unsafe_allow_html=True,
-                )
-            with c_top[1]:
-                bar_val = int(prob * 100)
-                st.markdown('<div class="metric-label">Confidence gauge</div>', unsafe_allow_html=True)
-                st.progress(bar_val)
-
-            st.markdown("<hr style='border-color:rgba(55,65,81,0.8);margin:0.9rem 0;'>", unsafe_allow_html=True)
-
-            cc1, cc2 = st.columns(2)
-            with cc1:
-                st.markdown('<div class="metric-label">Positive drivers</div>', unsafe_allow_html=True)
-                if pos_tokens:
-                    chips = ""
-                    for word, score in pos_tokens:
-                        chips += f"<span class='token-chip-pos'>{word}<span class='token-score'>{score:.3f}</span></span>"
-                    st.markdown(chips, unsafe_allow_html=True)
-                else:
-                    st.caption("No strong positive tokens detected.")
-            with cc2:
-                st.markdown('<div class="metric-label">Negative drivers</div>', unsafe_allow_html=True)
-                if neg_tokens:
-                    chips = ""
-                    for word, score in neg_tokens:
-                        chips += f"<span class='token-chip-neg'>{word}<span class='token-score'>{score:.3f}</span></span>"
-                    st.markdown(chips, unsafe_allow_html=True)
-                else:
-                    st.caption("No strong negative tokens detected.")
-
-        else:
-            st.markdown(
-                """
-                <div style="font-size:0.9rem;color:#9ca3af;">
-                    Run an analysis to see prediction, confidence gauges, and the words that push the model towards positive or negative sentiment.
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
-        st.markdown("</div>", unsafe_allow_html=True)
-
-with tabs[1]:
-    st.markdown('<div class="section-title">Upload CSV for batch sentiment report</div>', unsafe_allow_html=True)
-    st.markdown(
-        '<div class="card-soft">Upload a CSV with a <b>text</b> column. The app will score each row and build visual insights for your report.</div>',
-        unsafe_allow_html=True,
+    st.markdown("##### 🎚️ Confidence Threshold")
+    gating_threshold = st.slider(
+        "Confidence Gating Threshold",
+        min_value=0.50,
+        max_value=0.85,
+        value=0.65,
+        step=0.05,
+        help="Higher = stricter. Borderline predictions become 'Uncertain'.",
     )
 
-    uploaded = st.file_uploader("Drop your CSV here", type=["csv"])
+    st.success(
+        f"**Active: {gating_threshold:.2f}**\n\n"
+        f"- P ≥ {gating_threshold:.2f} → **Positive** ✅\n"
+        f"- P ≤ {1.0 - gating_threshold:.2f} → **Negative** ❌\n"
+        f"- Between → **Uncertain** ⚠️"
+    )
+
+    st.divider()
+    st.markdown("##### 📐 Model Stack")
+    st.markdown(
+        "- **35k** Word N-Grams `(1,2)`\n"
+        "- **15k** Char N-Grams `char_wb`\n"
+        "- **4D** VADER Lexicon Fusion\n"
+        "- L2 LogReg `C=2.5` Champion\n"
+        "- `<0.001ms` per prediction"
+    )
+    st.divider()
+    st.caption("Built by **Rhydham Shah**")
+
+# ─── Page Title ──────────────────────────────────────────────────
+st.markdown("## ⚡ Sentiment Engine")
+st.markdown(
+    "Analyze any text with hybrid sub-word N-grams, VADER lexicon fusion, "
+    "and 3-tier confidence gating. Achieves **≥90% accuracy** on confident predictions."
+)
+st.markdown("---")
+
+# ─── Tabs ────────────────────────────────────────────────────────
+tab_live, tab_csv = st.tabs(["⚡ Live Analyzer", "📊 Batch CSV"])
+
+
+# ═════════════════════════════════════════════════════════════════
+# TAB 1 — Live Analyzer
+# ═════════════════════════════════════════════════════════════════
+with tab_live:
+
+    user_text = st.text_area(
+        "Enter text to analyze",
+        height=130,
+        placeholder="Type or paste a tweet, product review, customer email, or any text…",
+    )
+
+    analyze_btn = st.button("🔍 Analyze Sentiment", type="primary")
+
+    if analyze_btn and user_text.strip():
+        decision, prob, pos_tokens, neg_tokens, status = explain_text(
+            user_text, top_k=8, threshold=gating_threshold
+        )
+
+        st.markdown("---")
+
+        # ── Result Section ──
+        col_result, col_conf = st.columns(2)
+
+        with col_result:
+            if decision == "Positive":
+                emoji, color_hex = "😊", "#22c55e"
+            elif decision == "Negative":
+                emoji, color_hex = "😡", "#ef4444"
+            else:
+                emoji, color_hex = "🤔", "#f59e0b"
+
+            st.markdown(
+                f"### {emoji} {decision}",
+            )
+            if status == "High Confidence":
+                st.success(f"**{status}** — Model is highly certain about this prediction.")
+            else:
+                st.warning(f"**{status}** — Prediction falls in the borderline zone.")
+
+        with col_conf:
+            st.metric(
+                label="P(Positive)",
+                value=f"{prob:.1%}",
+            )
+            st.progress(int(prob * 100))
+
+        st.markdown("---")
+
+        # ── Token Attribution ──
+        st.markdown("#### 🧬 Token Attribution — What drove this prediction")
+
+        drv_pos, drv_neg = st.columns(2)
+
+        with drv_pos:
+            st.markdown("**▲ Positive Drivers**")
+            if pos_tokens:
+                for word, score in pos_tokens:
+                    score_pct = min(abs(score) / 2.0, 1.0)
+                    bar_len = int(score_pct * 20)
+                    bar_viz = "🟩" * max(bar_len, 1)
+                    st.markdown(
+                        f"`{word}` → **+{score:.3f}** {bar_viz}"
+                    )
+            else:
+                st.caption("No positive drivers detected.")
+
+        with drv_neg:
+            st.markdown("**▼ Negative Drivers**")
+            if neg_tokens:
+                for word, score in neg_tokens:
+                    score_pct = min(abs(score) / 2.0, 1.0)
+                    bar_len = int(score_pct * 20)
+                    bar_viz = "🟥" * max(bar_len, 1)
+                    st.markdown(
+                        f"`{word}` → **{score:.3f}** {bar_viz}"
+                    )
+            else:
+                st.caption("No negative drivers detected.")
+
+    elif analyze_btn:
+        st.warning("⚠️ Please enter some text first.")
+    else:
+        st.info("💡 Type something above and click **Analyze Sentiment** to see results.")
+
+
+# ═════════════════════════════════════════════════════════════════
+# TAB 2 — CSV Batch Studio
+# ═════════════════════════════════════════════════════════════════
+with tab_csv:
+
+    st.markdown(
+        f"Upload a CSV with a `text` column. "
+        f"Every row gets scored with 3-tier gating at threshold **{gating_threshold:.2f}**."
+    )
+
+    uploaded = st.file_uploader("Upload CSV", type=["csv"])
 
     if uploaded:
         df_raw = pd.read_csv(uploaded)
 
         if "text" not in df_raw.columns:
-            st.error("CSV must contain a 'text' column.")
+            st.error("❌ CSV must contain a **text** column. Check your file and try again.")
         else:
-            df_pred = predict_dataframe(df_raw)
+            with st.spinner("🔄 Classifying with hybrid N-grams + VADER lexicon…"):
+                df_pred = predict_dataframe(df_raw, threshold=gating_threshold)
 
             total = len(df_pred)
-            pos = int((df_pred["label"] == 1).sum())
-            neg = int((df_pred["label"] == 0).sum())
-            pos_rate = (pos / total * 100) if total > 0 else 0.0
+            pos = int((df_pred["sentiment"] == "Positive").sum())
+            neg = int((df_pred["sentiment"] == "Negative").sum())
+            neu = int((df_pred["sentiment"] == "Neutral / Uncertain").sum())
 
-            m1, m2, m3 = st.columns(3)
-            with m1:
-                st.markdown('<div class="card-soft">', unsafe_allow_html=True)
-                st.markdown('<div class="metric-label">Total records</div>', unsafe_allow_html=True)
-                st.markdown(f'<div class="metric-value">{total}</div>', unsafe_allow_html=True)
-                st.markdown("</div>", unsafe_allow_html=True)
-            with m2:
-                st.markdown('<div class="card-soft">', unsafe_allow_html=True)
-                st.markdown('<div class="metric-label">Positive</div>', unsafe_allow_html=True)
-                st.markdown(f'<div class="metric-value">{pos}</div>', unsafe_allow_html=True)
-                st.markdown('<div class="metric-pill-pos">High-intent / happy users</div>', unsafe_allow_html=True)
-                st.markdown("</div>", unsafe_allow_html=True)
-            with m3:
-                st.markdown('<div class="card-soft">', unsafe_allow_html=True)
-                st.markdown('<div class="metric-label">Negative</div>', unsafe_allow_html=True)
-                st.markdown(f'<div class="metric-value">{neg}</div>', unsafe_allow_html=True)
-                st.markdown('<div class="metric-pill-neg">Churn / risk signals</div>', unsafe_allow_html=True)
-                st.markdown("</div>", unsafe_allow_html=True)
+            st.markdown("---")
 
-            st.markdown("<br>", unsafe_allow_html=True)
+            # ── Stats Row ──
+            st.markdown("#### 📊 Summary")
 
-            g1, g2 = st.columns([1.1, 1.1])
+            m1, m2, m3, m4 = st.columns(4)
+            m1.metric("Total Records", f"{total:,}")
+            m2.metric("Positive 😊", f"{pos:,}", delta=f"{pos/total*100:.1f}%" if total else "0%")
+            m3.metric("Negative 😡", f"{neg:,}", delta=f"{neg/total*100:.1f}%" if total else "0%", delta_color="inverse")
+            m4.metric("Uncertain 🤔", f"{neu:,}", delta=f"{neu/total*100:.1f}%" if total else "0%", delta_color="off")
 
-            with g1:
-                st.markdown('<div class="card">', unsafe_allow_html=True)
-                st.markdown('<div class="section-title">Sentiment distribution</div>', unsafe_allow_html=True)
+            st.markdown("---")
+
+            # ── Charts ──
+            st.markdown("#### 📈 Visualizations")
+
+            chart_col1, chart_col2 = st.columns(2)
+
+            with chart_col1:
+                st.markdown("**Sentiment Distribution**")
                 fig_bar = plot_sentiment_bar(df_pred)
                 st.pyplot(fig_bar, use_container_width=True)
-                st.markdown("</div>", unsafe_allow_html=True)
+                plt.close(fig_bar)
 
-            with g2:
-                st.markdown('<div class="card">', unsafe_allow_html=True)
-                st.markdown('<div class="section-title">Positive signal cloud</div>', unsafe_allow_html=True)
-                wc_pos = wordcloud_for_sentiment(df_pred, 1)
+            with chart_col2:
+                st.markdown("**Positive WordCloud**")
+                wc_pos = wordcloud_for_sentiment(df_pred, "Positive")
                 if wc_pos:
                     st.pyplot(wc_pos, use_container_width=True)
+                    plt.close(wc_pos)
                 else:
-                    st.write("No positive texts found.")
-                st.markdown("</div>", unsafe_allow_html=True)
+                    st.caption("Not enough positive texts to generate cloud.")
 
-            st.markdown("<br>", unsafe_allow_html=True)
+            st.markdown("")
 
-            st.markdown('<div class="card">', unsafe_allow_html=True)
-            st.markdown('<div class="section-title">Negative friction cloud</div>', unsafe_allow_html=True)
-            wc_neg = wordcloud_for_sentiment(df_pred, 0)
+            st.markdown("**Negative WordCloud**")
+            wc_neg = wordcloud_for_sentiment(df_pred, "Negative")
             if wc_neg:
                 st.pyplot(wc_neg, use_container_width=True)
+                plt.close(wc_neg)
             else:
-                st.write("No negative texts found.")
-            st.markdown("</div>", unsafe_allow_html=True)
+                st.caption("Not enough negative texts to generate cloud.")
 
-            st.markdown("<br>", unsafe_allow_html=True)
+            st.markdown("---")
 
-            st.markdown('<div class="card">', unsafe_allow_html=True)
-            st.markdown('<div class="section-title">Scored dataset</div>', unsafe_allow_html=True)
-            st.dataframe(df_pred, use_container_width=True, hide_index=True)
-            st.markdown("</div>", unsafe_allow_html=True)
+            # ── Data Table ──
+            st.markdown("#### 🗃️ Scored Dataset")
+            st.dataframe(df_pred, use_container_width=True, hide_index=True, height=400)
     else:
-        st.caption("No file uploaded yet. Drop a CSV to generate a full sentiment report.")
+        st.info("📤 Drop a CSV file above to generate a full sentiment report with charts and word clouds.")
